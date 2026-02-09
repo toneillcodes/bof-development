@@ -1,0 +1,32 @@
+alias arg-parse {
+    local('$arg %params $path $recursive $out');
+
+    # Initialize defaults
+    %params['/path']      = "";
+    %params['/recursive'] = "false";
+    %params['/out']       = "text";
+
+    # Parse arguments into the %params map
+    foreach $arg (sublist(@_, 1)) {
+        if ($arg MATCHES '(.*):(.*)') {
+            ($key, $val) = matched();
+            %params[$key] = $val;
+        }
+    }
+
+    # Extract for packing
+    $path      = %params['/path'];
+    $recursive = iif(%params['/recursive'] eq "true", 1, 0);
+    $out_mode  = iif(%params['/out'] eq "csv", 1, 0);
+
+    if ($path eq "") {
+        berror($1, "Usage: arg-parse /path:C:\\test [/recursive:true] [/out:csv]");
+        return;
+    }
+
+    # Pack in a strict order: [string, int, int]
+    $args = bof_pack($1, "zii", $path, $recursive, $out_mode);
+
+    btask($1, "Tasked DPAPI scan on $path (Recursive: $recursive, CSV: $out_mode)");
+    beacon_inline_execute($1, readbof($1, "arg-parse.o"), "go", $args);
+}
