@@ -1,0 +1,97 @@
+# DO NOT USE UNLESS YOU'RE MESSING WITH REGEX. USE arg-parse.cna INSTEAD
+# this was made while troubleshooting regex behavior
+# the loop was attempted multiple ways but it seems the regex processing engine may be mucking things up
+# running the regex loops twice works consitently, using either loop just once fails every other execution
+alias arg-parse {
+    # Cleaned local declaration: removed duplicate $data and unnecessary temp variables
+    local('$bid $handle $data $i $path_val $recursive_val $recursive_opt $out_val $out_opt $args');
+    $bid = $1;
+
+    # Initialize defaults
+    $path_val      = $null;
+    $recursive_val = "false";
+    $out_val       = "false";
+
+    # Debug output
+    blog2($1, size(@_));
+    blog2($1, @_[1]);
+    blog2($1, @_[2]);
+    blog2($1, @_[3]);
+    blog2($1, @_[4]);
+
+    # Parse through arguments looking for our switches
+    # the for loop with hasmatch followed by matches is not terribly efficient, but it works
+    for($i = 1; $i < size(@_); $i++) {        
+        if(@_[$i] hasmatch '^\/path:(.*)') {
+            blog2($1,"Found path in position $i");        
+            $path = matches(@_[$i], '^\/path:(.*)');
+            $path_val = $path[0];
+            blog2($1, "Value = $path_val");
+        } else if(@_[$i] hasmatch '^\/recursive:(.*)') {
+            blog2($1,"Found recursive in position $i");        
+            $recursive = matches(@_[$i], '^\/recursive:(.*)');
+            $recursive_val = $recursive[0];
+            blog2($1, "Value = $recursive_val");      
+        } else if(@_[$i] hasmatch '^\/out:(.*)') {
+            blog2($1,"Found out in position $i");        
+            $out = matches(@_[$i], '^\/out:(.*)');
+            $out_val = $out[0];
+            blog2($1, "Value = $out_val");
+        }       
+    }
+
+    # Parse through arguments looking for our switches, optimized logic
+    for($i = 1; $i < size(@_); $i++) {        
+        if(@_[$i] hasmatch '^\/path:(.*)') {
+            # matched()[0] pulls the capture group directly as a string
+            $path_val = matched()[0];
+        } else if(@_[$i] hasmatch '^\/recursive:(.*)') {
+            $recursive_val = matched()[0];
+        } else if(@_[$i] hasmatch '^\/out:(.*)') {
+            $out_val = matched()[0];
+        }       
+    }
+
+    # Validation - 'is $null' is more robust than 'eq ""' for uninitialized locals
+    if ($path_val is $null) {
+        berror($bid, "Missing required argument. Usage: arg-parse /path:C:\\target [/recursive:true|false] [/out:true|false]");
+        return;
+    }
+
+    #$recursive_opt = 0;
+    #if($recursive_val eq "true") {
+    #    $recursive_opt = 1;
+    #}
+    #blog2($1, "recursive_opt = $recursive_opt");
+
+    #$out_opt = 0;
+    #if($out_val eq "true") {
+    #    $out_opt = 1;
+    #}
+    #blog2($1, "out_opt = $out_opt");
+
+    # Use standard if statements instead of ternary operators
+    $recursive_opt = 0;
+    if (lc($recursive_val) eq "true") {
+        $recursive_opt = 1;
+    }
+
+    $out_opt = 0;
+    if (lc($out_val) eq "true") {
+        $out_opt = 1;
+    }
+    blog2($1, "recursive_opt = $recursive_opt");
+    blog2($1, "out_opt = $out_opt");
+
+    # Read the compiled BOF file
+    # Ensure arg-parse.o is in the same directory as this script
+    $handle = openf(script_resource("arg-parse.o"));
+    $data   = readb($handle, -1);
+    closef($handle);    
+    
+    # Pack: z = path (string), i = recursive_opt (int), i = out_opt (int)
+    $args = bof_pack($bid, "zii", $path_val, $recursive_opt, $out_opt);
+
+    btask($bid, "Tasked arg-parse execution");
+    beacon_inline_execute($bid, $data, "go", $args);
+}

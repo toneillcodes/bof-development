@@ -1,32 +1,71 @@
 alias arg-parse {
-    local('$arg %params $path $recursive $out');
+    local('$bid $handle $data $i $arg $parts $path_val $recursive_val $recursive_opt $out_val $out_opt $args');
+    $bid = $1;
+
+    # --- SCRIPT CONSOLE DEBUG ---
+    println("DEBUG: arg-parse triggered. Args: " . @_);                
 
     # Initialize defaults
-    %params['/path']      = "";
-    %params['/recursive'] = "false";
-    %params['/out']       = "text";
+    $path_val      = $null;
+    $recursive_val = "false";
+    $out_val       = "false";
+    $recursive_opt = 0;
+    $out_opt       = 0;
 
-    # Parse arguments into the %params map
-    foreach $arg (sublist(@_, 1)) {
-        if ($arg MATCHES '(.*):(.*)') {
-            ($key, $val) = matched();
-            %params[$key] = $val;
+    # Parse through arguments using split(), abandoned regex due to inconsistent results
+    for($i = 1; $i < size(@_); $i++) {
+        $arg = @_[$i];
+
+        # Split the argument by the first colon only
+        $parts = split(':', $arg, 2);     
+                   
+        # Check if we have both a key and a value
+        if (size($parts) == 2) {
+            $key = $parts[0];
+            $val = $parts[1];
+            blog2($1, $key);
+            # Compare keys
+            if ($key eq "/path") {
+                $path_val = $val;
+            } 
+            else if ($key eq "/recursive") {
+                $recursive_val = $val;
+            } 
+            else if ($key eq "/out") {
+                $out_val = $val;
+            }
         }
     }
 
-    # Extract for packing
-    $path      = %params['/path'];
-    $recursive = iif(%params['/recursive'] eq "true", 1, 0);
-    $out_mode  = iif(%params['/out'] eq "csv", 1, 0);
-
-    if ($path eq "") {
-        berror($1, "Usage: arg-parse /path:C:\\test [/recursive:true] [/out:csv]");
+    # Validation
+    if ($path_val is $null) {
+        berror($bid, "Missing required argument. Usage: arg-parse /path:C:\\target [/recursive:true|false] [/out:true|false]");
+        
+        # --- SCRIPT CONSOLE DEBUG ---
+        println("DEBUG: Validation failed. Path_val is null.");
         return;
     }
 
-    # Pack in a strict order: [string, int, int]
-    $args = bof_pack($1, "zii", $path, $recursive, $out_mode);
+    # Logic conversion for our true/false values
+    if (lc($recursive_val) eq "true") { $recursive_opt = 1; }
+    if (lc($out_val) eq "true") { $out_opt = 1; }
 
-    btask($1, "Tasked DPAPI scan on $path (Recursive: $recursive, CSV: $out_mode)");
-    beacon_inline_execute($1, readbof($1, "arg-parse.o"), "go", $args);
+    # BOF Execution
+    $handle = openf(script_resource("arg-parse.o"));
+    if ($handle is $null) {
+        berror($bid, "Could not find BOF file: arg-parse.o");
+        return;
+    }
+    $data = readb($handle, -1);
+    closef($handle);    
+    
+    # Pack arguments in the order that the BOF is expecting them to be in:
+    # path, recursive, out
+    $args = bof_pack($bid, "zii", $path_val, $recursive_opt, $out_opt);
+
+    # --- SCRIPT CONSOLE DEBUG ---
+    println(format("DEBUG: Packing arguments - Path: %s, Rec: %d, Out: %d", $path_val, $recursive_opt, $out_opt));
+
+    btask($bid, "Tasked arg-parse execution");
+    beacon_inline_execute($bid, $data, "go", $args);
 }
