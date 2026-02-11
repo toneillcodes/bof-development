@@ -23,7 +23,7 @@ alias arg-parse {
         if (size($parts) == 2) {
             $key = $parts[0];
             $val = $parts[1];
-            blog2($1, $key);
+            #blog2($1, $key);
             # Compare keys
             if ($key eq "/path") {
                 $path_val = $val;
